@@ -1,16 +1,22 @@
 # Lighter Exchange Spot Pair Monitor
 
-A Python-based monitoring system that tracks new spot trading pairs on the Lighter decentralized exchange and sends notifications when new pairs are added.
+A Python-based monitoring system that tracks new spot trading pairs on the Lighter decentralized exchange and sends notifications **when new pairs go LIVE on the website**.
+
+## Key Feature: Website-Live Detection
+
+This monitor specifically detects when pairs become **live and visible on the Lighter website**, not just when they appear in the backend API. Since the backend can register pairs before they're available to trade on the website, this monitor waits for pairs to actually be live on the site before alerting you.
 
 ## Features
 
-- **Real-time Pair Monitoring**: Continuously checks for new spot trading pairs on Lighter
+- **Website-Live Pair Detection**: Monitors when pairs become visible/tradeable on the Lighter website (not just backend)
+- **Backend vs. Website Awareness**: Tracks both API pairs and website-visible pairs to ensure accuracy
+- **Real-time Pair Monitoring**: Continuously checks for new spot trading pairs
 - **Multiple Notification Channels**:
   - Console output (default)
   - Email notifications
   - Webhook notifications
   - Discord notifications
-- **Persistent Storage**: Tracks previously seen pairs in JSON format
+- **Persistent Storage**: Tracks previously seen website-live pairs in JSON format
 - **Scheduled Monitoring**: Run continuously or as a one-time check
 - **Error Handling**: Graceful error recovery and error notifications
 - **Easy Configuration**: Environment-based configuration with `.env` file support
@@ -146,8 +152,9 @@ Lighter-new-pair-checker/
 
 ## Data Storage
 
-The monitor stores tracked pairs in `.data/tracked_pairs.json`:
+The monitor stores tracked pairs in two files:
 
+**`.data/website_live_pairs.json`** - Pairs currently live on the website:
 ```json
 {
   "pairs": ["LIT_USDC", "ETH_USDC"],
@@ -156,14 +163,30 @@ The monitor stores tracked pairs in `.data/tracked_pairs.json`:
 }
 ```
 
+**`.data/tracked_pairs.json`** - All pairs from backend API (for reference):
+```json
+{
+  "pairs": ["LIT_USDC", "ETH_USDC", "BTC_USDC"],
+  "last_updated": "2024-01-07T12:34:56.789012",
+  "total_count": 3
+}
+```
+
+The key difference: You'll only be notified when pairs appear in `website_live_pairs.json`, which reflects what's actually tradeable on the website.
+
 ## How It Works
 
-1. **Fetch Current Pairs**: Uses the Lighter SDK to fetch all available spot trading pairs
-2. **Compare with Previous**: Compares current pairs with previously tracked pairs
-3. **Detect New Pairs**: Identifies any new pairs not seen before
-4. **Send Notifications**: Sends notifications through configured channels
-5. **Update Storage**: Updates the stored pair list for next check
-6. **Schedule Next Check**: Waits for the configured interval before next check
+1. **Fetch Backend Pairs**: Uses the Lighter SDK API to fetch all spot trading pairs from the backend
+2. **Detect Website-Live Pairs**: Fetches the Lighter website to detect which pairs are actually visible/tradeable
+3. **Compare with Previous**: Compares current website-live pairs with previously tracked ones
+4. **Detect NEW Live Pairs**: Identifies pairs that are now live on the website for the first time
+5. **Send Notifications**: Only notifies for pairs that are confirmed live on the website
+6. **Update Storage**:
+   - Updates `website_live_pairs.json` with pairs currently live on website
+   - Updates `tracked_pairs.json` with all backend API pairs (for reference)
+7. **Schedule Next Check**: Waits for the configured interval before next check
+
+**Important**: Notifications are only sent when a pair transitions from "not visible on website" to "live on website". Pairs that exist in the backend but aren't yet on the website won't trigger alerts.
 
 ## API Details
 

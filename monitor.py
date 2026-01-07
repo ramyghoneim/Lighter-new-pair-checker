@@ -19,31 +19,38 @@ except ImportError:
 
 from notification import NotificationManager
 from config import Config
+from website_detector import WebsitePairDetector
 
 
 class PairMonitor:
     def __init__(self, config: Config):
         self.config = config
         self.pairs_file = Path(config.pairs_storage_path)
+        self.website_pairs_file = Path(config.pairs_storage_path).parent / 'website_live_pairs.json'
         self.notifier = NotificationManager(config)
-        self.previous_pairs = self._load_pairs()
+        self.detector = WebsitePairDetector(config)
+        self.previous_api_pairs = self._load_pairs('api')
+        self.previous_website_pairs = self._load_pairs('website')
 
-    def _load_pairs(self) -> set:
+    def _load_pairs(self, pair_type: str = 'api') -> set:
         """Load previously tracked pairs from storage."""
-        if self.pairs_file.exists():
+        file_path = self.website_pairs_file if pair_type == 'website' else self.pairs_file
+
+        if file_path.exists():
             try:
-                with open(self.pairs_file, 'r') as f:
+                with open(file_path, 'r') as f:
                     data = json.load(f)
                     return set(data.get('pairs', []))
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load pairs file: {e}")
+                print(f"Warning: Could not load {pair_type} pairs file: {e}")
                 return set()
         return set()
 
-    def _save_pairs(self, pairs: set) -> None:
+    def _save_pairs(self, pairs: set, pair_type: str = 'api') -> None:
         """Save current pairs to storage."""
-        self.pairs_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.pairs_file, 'w') as f:
+        file_path = self.website_pairs_file if pair_type == 'website' else self.pairs_file
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, 'w') as f:
             json.dump({
                 'pairs': sorted(list(pairs)),
                 'last_updated': datetime.utcnow().isoformat(),
@@ -107,42 +114,56 @@ class PairMonitor:
         return True
 
     async def check_for_new_pairs(self) -> list:
-        """Check for new trading pairs and return list of new ones."""
-        current_pairs = await self.fetch_pairs()
+        """Check for new trading pairs that are live on the website."""
+        # Fetch pairs from both API and website
+        current_api_pairs = await self.fetch_pairs()
+        current_website_pairs = await self.detector.get_website_pairs()
 
-        # Find new pairs
-        new_pairs = current_pairs - self.previous_pairs
+        print(f"\nAPI pairs: {len(current_api_pairs)}")
+        print(f"Website pairs: {len(current_website_pairs)}")
 
-        if new_pairs:
-            print(f"\n🎉 Found {len(new_pairs)} new pair(s)!")
-            for pair in sorted(new_pairs):
+        # Find pairs that are LIVE ON WEBSITE (not just in backend API)
+        live_website_pairs = current_website_pairs
+
+        # Find NEW pairs that are live on website
+        new_live_pairs = live_website_pairs - self.previous_website_pairs
+
+        if new_live_pairs:
+            print(f"\n🎉 Found {len(new_live_pairs)} new pair(s) LIVE on website!")
+            for pair in sorted(new_live_pairs):
                 print(f"  ✓ {pair}")
 
-            # Send notifications
-            await self.notifier.notify_new_pairs(sorted(new_pairs))
+            # Send notifications only for website-live pairs
+            await self.notifier.notify_new_pairs(sorted(new_live_pairs))
 
             # Update stored pairs
-            self.previous_pairs = current_pairs
-            self._save_pairs(current_pairs)
+            self.previous_website_pairs = live_website_pairs
+            self._save_pairs(live_website_pairs, pair_type='website')
         else:
-            print(f"\nNo new pairs detected. Total pairs: {len(current_pairs)}")
+            print(f"\nNo new pairs went live on website. Total live pairs: {len(live_website_pairs)}")
 
-        return sorted(list(new_pairs))
+        # Also track API pairs for reference
+        self.previous_api_pairs = current_api_pairs
+        self._save_pairs(current_api_pairs, pair_type='api')
+
+        return sorted(list(new_live_pairs))
 
     async def run(self) -> None:
         """Run a single monitoring check."""
         print(f"\n{'='*60}")
         print(f"Lighter Pair Monitor - Check at {datetime.utcnow().isoformat()}")
         print(f"{'='*60}")
+        print("Monitoring for NEW pairs that go LIVE on the website...")
 
         try:
             new_pairs = await self.check_for_new_pairs()
 
             # Print current status
-            print(f"\nTracked pairs: {len(self.previous_pairs)}")
-            if self.previous_pairs:
-                print("Current pairs:")
-                for pair in sorted(self.previous_pairs):
+            print(f"\n{'='*60}")
+            print(f"Live Website Pairs: {len(self.previous_website_pairs)}")
+            if self.previous_website_pairs:
+                print("Currently live pairs on website:")
+                for pair in sorted(self.previous_website_pairs):
                     print(f"  • {pair}")
 
         except Exception as e:
