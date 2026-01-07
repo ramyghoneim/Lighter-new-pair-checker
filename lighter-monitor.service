@@ -1,0 +1,42 @@
+[Unit]
+Description=Lighter Exchange Spot Pair Monitor - 24/7 Monitoring Service
+Documentation=https://github.com/yourusername/Lighter-new-pair-checker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lighter-monitor
+Group=lighter-monitor
+WorkingDirectory=/home/lighter-monitor/Lighter-new-pair-checker
+
+# Environment variables
+Environment="PATH=/home/lighter-monitor/Lighter-new-pair-checker/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+EnvironmentFile=/home/lighter-monitor/Lighter-new-pair-checker/.env
+
+# Start command
+ExecStart=/home/lighter-monitor/Lighter-new-pair-checker/venv/bin/python3 /home/lighter-monitor/Lighter-new-pair-checker/scheduler.py
+
+# Restart policy - ensures 24/7 operation
+Restart=always
+RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lighter-monitor
+
+# Security/resource limits
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/home/lighter-monitor/Lighter-new-pair-checker/.data
+
+# Nice value (lower priority so it doesn't impact system)
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

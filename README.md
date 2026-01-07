@@ -28,9 +28,9 @@ This monitor specifically detects when pairs become **live and visible on the Li
 cd Lighter-new-pair-checker
 ```
 
-2. Install dependencies:
+2. Run the setup script:
 ```bash
-pip install -r requirements.txt
+./setup.sh
 ```
 
 3. Create a `.env` file from the example:
@@ -38,23 +38,71 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-4. Edit `.env` with your preferred settings
+4. Edit `.env` with your preferred settings:
+```bash
+nano .env
+```
 
 ## Quick Start
 
-### Run Once (Check immediately)
+### Test the Monitor (One-time check)
 ```bash
 python monitor.py
 ```
 
-### Continuous Monitoring (Checks every 5 minutes)
+### Run for 24/7 Monitoring (Recommended for Production)
+
+#### Option 1: Systemd Service (Linux) - **RECOMMENDED**
+Automatically restarts on failure, runs at boot, manages logs automatically.
+
 ```bash
-python scheduler.py
+# Install and start the service
+sudo bash install-service.sh
 ```
 
-### Custom Interval (Check every 60 seconds)
+Check status:
 ```bash
+sudo systemctl status lighter-monitor
+```
+
+View live logs:
+```bash
+sudo journalctl -u lighter-monitor -f
+```
+
+#### Option 2: Docker Container
+Run in a containerized environment (requires Docker):
+
+```bash
+# Build and start
+docker-compose up -d
+
+# View logs
+docker-compose logs -f lighter-monitor
+
+# Stop
+docker-compose down
+```
+
+#### Option 3: Manual Continuous Run
+Run in the foreground (less reliable, will stop if terminal closes):
+
+```bash
+# Checks every 5 minutes
+python scheduler.py
+
+# Custom interval (60 seconds)
 python scheduler.py --interval 60
+```
+
+#### Option 4: Supervisor (Process Manager)
+For servers without systemd:
+
+```bash
+sudo cp lighter-monitor.conf /etc/supervisor/conf.d/
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start lighter-monitor
 ```
 
 ## Configuration
@@ -247,36 +295,50 @@ Sends JSON POST request:
 ### Discord
 Sends embedded Discord message with pairs list
 
-## Setting Up as a Background Service
+## 24/7 Background Service Setup
 
-### Linux (systemd)
+### Linux (Systemd) - Easiest Setup ⭐
 
-Create `/etc/systemd/system/lighter-monitor.service`:
-```ini
-[Unit]
-Description=Lighter Exchange Spot Pair Monitor
-After=network.target
+The quickest way to run 24/7:
 
-[Service]
-Type=simple
-User=youruser
-WorkingDirectory=/home/youruser/Lighter-new-pair-checker
-ExecStart=/usr/bin/python3 /home/youruser/Lighter-new-pair-checker/scheduler.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then:
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable lighter-monitor
-sudo systemctl start lighter-monitor
+# One command does everything:
+# - Creates lighter-monitor user
+# - Installs systemd service
+# - Enables auto-start on boot
+# - Starts the monitor
+sudo bash install-service.sh
 ```
 
-### macOS (launchd)
+**Verify it's running:**
+```bash
+sudo systemctl status lighter-monitor
+```
+
+**View live logs:**
+```bash
+sudo journalctl -u lighter-monitor -f
+```
+
+**Management commands:**
+```bash
+sudo systemctl stop lighter-monitor      # Stop monitoring
+sudo systemctl start lighter-monitor     # Resume monitoring
+sudo systemctl restart lighter-monitor   # Restart
+sudo systemctl disable lighter-monitor   # Remove auto-start
+```
+
+### Docker (All Platforms)
+
+Works on Linux, macOS, Windows:
+
+```bash
+docker-compose up -d
+docker-compose logs -f lighter-monitor  # View logs
+docker-compose down                      # Stop
+```
+
+### macOS (Launchd)
 
 Create `~/Library/LaunchAgents/com.lighter.monitor.plist`:
 ```xml
@@ -299,6 +361,28 @@ Create `~/Library/LaunchAgents/com.lighter.monitor.plist`:
     <string>/var/log/lighter-monitor.log</string>
 </dict>
 </plist>
+```
+
+Then load it:
+```bash
+launchctl load ~/Library/LaunchAgents/com.lighter.monitor.plist
+```
+
+### Supervisor (Alternative Process Manager)
+
+For servers without systemd:
+
+```bash
+sudo cp lighter-monitor.conf /etc/supervisor/conf.d/
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start lighter-monitor
+
+# View status
+sudo supervisorctl status lighter-monitor
+
+# View logs
+tail -f /var/log/lighter-monitor/monitor.log
 ```
 
 ## License

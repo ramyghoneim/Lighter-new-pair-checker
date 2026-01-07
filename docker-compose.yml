@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  lighter-monitor:
+    build: .
+    container_name: lighter-pair-monitor
+    restart: always
+    environment:
+      - NOTIFICATION_TYPE=console
+      - CHECK_INTERVAL_SECONDS=300
+      - STORAGE_DIR=.data
+    volumes:
+      - ./data:/app/.data
+      - ./.env:/app/.env:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge
